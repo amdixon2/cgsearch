@@ -1,69 +1,30 @@
-#!/usr/bin/env python3
-import time
+#!/usr/bin/python3
+
+import sys
 from pathlib import Path
-
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-
+import requests
+import browser_cookie3
 
 def main() -> None:
-    url = "https://www.chessgames.com/"
+    if len(sys.argv) < 2 or not sys.argv[1].strip():
+        print("Usage: ./cgsearch.py <search_term>")
+        sys.exit(1)
+
+    query = sys.argv[1].strip()
+    query = query.replace(" ", "+")
+
     output_path = Path("./results.html")
 
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1280,800")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
-    options.add_argument(
-        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    )
+    # Load cookies from Chrome
+    cj = browser_cookie3.chrome()
 
-    driver = webdriver.Chrome(options=options)
-    try:
-        # Reduce obvious webdriver fingerprints
-        driver.execute_cdp_cmd(
-            "Page.addScriptToEvaluateOnNewDocument",
-            {
-                "source": """
-                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                """
-            },
-        )
+    # Use cookies in a request
+    url = "https://www.chessgames.com/perl/ezsearch.pl?search=" + query
+    r = requests.get(url, cookies=cj)
 
-        driver.get(url)
-
-        wait = WebDriverWait(driver, 15)
-
-        print("Waiting for input[name='search'] to be present...")
-        search_box = wait.until(
-            EC.presence_of_element_located((By.NAME, "search"))
-        )
-        search_box.clear()
-        search_box.send_keys("morphy")
-        search_box.send_keys(Keys.RETURN)
-
-        # Wait for results page to load by checking URL change or results form
-        print("Waiting for results page URL to include 'search'...")
-        wait.until(lambda d: "search" in d.current_url.lower())
-
-        # Small delay to allow dynamic content to settle, if any
-        time.sleep(1)
-
-        output_path.write_text(driver.page_source, encoding="utf-8")
-        print(f"Saved results to {output_path.resolve()}")
-    finally:
-        driver.quit()
+    output_path.write_text(r.text, encoding="utf-8")
 
 
 if __name__ == "__main__":
     main()
+
